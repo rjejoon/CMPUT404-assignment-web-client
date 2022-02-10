@@ -38,7 +38,10 @@ class HTTPClient(object):
     def get_host_port(self, url):
         o = urllib.parse.urlparse(url)
         host = o.hostname
-        port = o.port if o.port else 80
+        port = 80       # 80 = TCP HTTP default port
+        if o.port:
+            port = o.port
+
         return host, port
 
     def get_path(self, url):
@@ -63,7 +66,7 @@ class HTTPClient(object):
     def get_body(self, data):
         l = data.split('\r\n')
         i = l.index('')
-        return l[i+1]
+        return ''.join(l[i+1:])
     
     def sendall(self, data):
         try:
@@ -91,14 +94,30 @@ class HTTPClient(object):
             ret = buffer.decode('ISO-8859-1')
         return ret
 
+    def encode_query_args(self, args: dict):
+        if args is None:
+            return ''
+
+        query = []
+        for key in args.keys():
+            key = urllib.parse.quote(key)
+            val = urllib.parse.quote(args[key])
+            query.append(f'{key}={val}')
+        return '&'.join(query)
+
     def GET(self, url, args=None):
         headers = []
         host, port = self.get_host_port(url)
         ip = socket.gethostbyname(host)
         self.connect(ip, port)
 
-        headers.append(f'GET {self.get_path(url)} HTTP/1.0')
+        query = self.encode_query_args(args)
+        if query != '':
+            query = '?' + query
+
+        headers.append(f'GET {self.get_path(url)}{query} HTTP/1.1')
         headers.append(f'Host: {host}')
+        headers.append('User-Agent: python/3.6.7')
         headers.append('\r\n')     # finish header
 
         self.sendall('\r\n'.join(headers))
@@ -108,14 +127,34 @@ class HTTPClient(object):
         code = self.get_code(reply)
         headers = self.get_headers(reply)
         body = self.get_body(reply)
-        print(code)
-        print(headers)
         print(body)
         return HTTPResponse(code, body)
 
     def POST(self, url, args=None):
-        code = 500
-        body = ""
+        headers = []
+        host, port = self.get_host_port(url)
+        ip = socket.gethostbyname(host)
+        self.connect(ip, port)
+
+        form_body = self.encode_query_args(args)
+        len_form = len(bytes(form_body, encoding='utf-8'))
+        print(form_body, len_form, end='\n')
+
+        headers.append(f'POST {self.get_path(url)} HTTP/1.1')
+        headers.append(f'Host: {host}')
+        headers.append('User-Agent: python/3.6.7')
+        headers.append('Content-Type: application/x-www-form-urlencoded')
+        headers.append(f'Content-Length: {len_form}')
+        headers.append('\r\n')      # finish header
+
+        self.sendall('\r\n'.join(headers) + form_body)
+        reply = self.recvall(self.socket)
+        self.close()
+
+        code = self.get_code(reply)
+        headers = self.get_headers(reply)
+        body = self.get_body(reply)
+        print(body)
         return HTTPResponse(code, body)
 
     def command(self, url, command="GET", args=None):
@@ -131,6 +170,10 @@ if __name__ == "__main__":
         help()
         sys.exit(1)
     elif (len(sys.argv) == 3):
-        print(client.command( sys.argv[2], sys.argv[1] ))
+        args = {'a':'a a a',
+                'b':'bbbbbbbbbbbbbbbbbbbbbb',
+                'c':'c',
+                'd':'012345678902321321'}
+        print(client.command( sys.argv[2], sys.argv[1], args))
     else:
         print(client.command( sys.argv[1] ))
