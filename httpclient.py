@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # coding: utf-8
-# Copyright 2016 Abram Hindle, https://github.com/tywtyw2002, and https://github.com/treedust
+# Copyright 2022 Abram Hindle, https://github.com/tywtyw2002, https://github.com/treedust, and Jejoon Ryu
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import re
 # you may use urllib to encode data appropriately
 import urllib.parse
 
+
 def help():
     print("httpclient.py [GET/POST] [URL]\n")
 
@@ -33,7 +34,16 @@ class HTTPResponse(object):
         self.body = body
 
 class HTTPClient(object):
-    #def get_host_port(self,url):
+
+    def get_host_port(self, url):
+        o = urllib.parse.urlparse(url)
+        host = o.hostname
+        port = o.port if o.port else 80
+        return host, port
+
+    def get_path(self, url):
+        o = urllib.parse.urlparse(url)
+        return o.path if o.path else '/'
 
     def connect(self, host, port):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -41,17 +51,27 @@ class HTTPClient(object):
         return None
 
     def get_code(self, data):
-        return None
+        l = data.split('\r\n')
+        status = l[0]
+        return int(status.split(' ')[1])
 
-    def get_headers(self,data):
-        return None
+    def get_headers(self, data):
+        l = data.split('\r\n')
+        i = l.index('')
+        return l[:i]
 
     def get_body(self, data):
-        return None
+        l = data.split('\r\n')
+        i = l.index('')
+        return l[i+1]
     
     def sendall(self, data):
-        self.socket.sendall(data.encode('utf-8'))
-        
+        try:
+            self.socket.sendall(data.encode('utf-8'))
+        except socket.error:
+            print("Error: GET send failed")
+            sys.exit(1)
+
     def close(self):
         self.socket.close()
 
@@ -65,11 +85,32 @@ class HTTPClient(object):
                 buffer.extend(part)
             else:
                 done = not part
-        return buffer.decode('utf-8')
+        try:
+            ret = buffer.decode('utf-8')
+        except UnicodeDecodeError:
+            ret = buffer.decode('ISO-8859-1')
+        return ret
 
     def GET(self, url, args=None):
-        code = 500
-        body = ""
+        headers = []
+        host, port = self.get_host_port(url)
+        ip = socket.gethostbyname(host)
+        self.connect(ip, port)
+
+        headers.append(f'GET {self.get_path(url)} HTTP/1.0')
+        headers.append(f'Host: {host}')
+        headers.append('\r\n')     # finish header
+
+        self.sendall('\r\n'.join(headers))
+        reply = self.recvall(self.socket)
+        self.close()
+
+        code = self.get_code(reply)
+        headers = self.get_headers(reply)
+        body = self.get_body(reply)
+        print(code)
+        print(headers)
+        print(body)
         return HTTPResponse(code, body)
 
     def POST(self, url, args=None):
