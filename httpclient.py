@@ -33,6 +33,9 @@ class HTTPResponse(object):
         self.code = code
         self.body = body
 
+    def __str__(self):
+        return self.body
+
 class HTTPClient(object):
 
     def get_host_port(self, url):
@@ -88,11 +91,7 @@ class HTTPClient(object):
                 buffer.extend(part)
             else:
                 done = not part
-        try:
-            ret = buffer.decode('utf-8')
-        except UnicodeDecodeError:
-            ret = buffer.decode('ISO-8859-1')
-        return ret
+        return buffer.decode('utf-8', errors='replace')
 
     def encode_query_args(self, args: dict):
         if args is None:
@@ -138,7 +137,6 @@ class HTTPClient(object):
 
         form_body = self.encode_query_args(args)
         len_form = len(bytes(form_body, encoding='utf-8'))
-        print(form_body, len_form, end='\n')
 
         headers.append(f'POST {self.get_path(url)} HTTP/1.1')
         headers.append(f'Host: {host}')
@@ -162,7 +160,8 @@ class HTTPClient(object):
             return self.POST( url, args )
         else:
             return self.GET( url, args )
-    
+
+
 if __name__ == "__main__":
     client = HTTPClient()
     command = "GET"
@@ -170,10 +169,6 @@ if __name__ == "__main__":
         help()
         sys.exit(1)
     elif (len(sys.argv) == 3):
-        args = {'a':'a a a',
-                'b':'bbbbbbbbbbbbbbbbbbbbbb',
-                'c':'c',
-                'd':'012345678902321321'}
-        print(client.command( sys.argv[2], sys.argv[1], args))
+        print(client.command(sys.argv[2], sys.argv[1]))
     else:
-        print(client.command( sys.argv[1] ))
+        print(client.command(sys.argv[1]))
